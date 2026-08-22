@@ -1,0 +1,6 @@
+{
+  "name": "Anti-Roubo MZ Pro",
+  "description": "Aplicativo de segurança anti-roubo com comandos por SMS, rastreamento offline, proteção por PIN, alarme sonoro e alerta de troca de chip SIM para Moçambique.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
