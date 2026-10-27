@@ -41,21 +41,26 @@ class BootAndSimReceiver : BroadcastReceiver() {
 
     private fun checkSimCard(context: Context, prefs: SecurityPreferences) {
         try {
-            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
-            val simState = tm.simState
-            if (simState != TelephonyManager.SIM_STATE_READY) {
+            val hwInfo = com.example.security.telephony.DeviceHardwareHelper.getFullDeviceHardwareInfo(context)
+            val primarySim = hwInfo.primarySim
+            val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+
+            val simState = tm?.simState ?: TelephonyManager.SIM_STATE_UNKNOWN
+            if (simState != TelephonyManager.SIM_STATE_READY && primarySim == null) {
                 return
             }
 
-            val currentOperator = tm.networkOperatorName.ifBlank { tm.simOperatorName }.ifBlank { "Desconhecida (MZ)" }
+            val currentOperator = primarySim?.operatorName ?: tm?.networkOperatorName?.ifBlank { tm.simOperatorName }?.ifBlank { "Desconhecida (MZ)" } ?: "Desconhecida (MZ)"
             val storedSimId = prefs.getLastKnownSim()
-            val currentSimId = tm.simOperator ?: currentOperator
+            val currentSimId = primarySim?.simSerialNumber?.ifBlank { null }
+                ?: primarySim?.operatorCode?.ifBlank { null }
+                ?: tm?.simOperator ?: currentOperator
 
             if (storedSimId.isNotBlank() && storedSimId != currentSimId) {
                 // SIM card has been replaced!
                 prefs.logEvent(
                     title = "ALERTA: Troca de Chip SIM Detectada!",
-                    description = "Novo operador detectado: $currentOperator (Anterior: ${prefs.getLastKnownOperator()})",
+                    description = "Novo operador detectado: $currentOperator (Anterior: ${prefs.getLastKnownOperator()}) | Aparelho: ${hwInfo.brand} ${hwInfo.model} | IMEI: ${hwInfo.imei1}",
                     type = EventType.SIM_CHANGED_ALERT
                 )
 
@@ -63,7 +68,7 @@ class BootAndSimReceiver : BroadcastReceiver() {
                 val contacts = prefs.getEmergencyContacts()
                 CoroutineScope(Dispatchers.IO).launch {
                     val status = LocationHelper.getFullDeviceStatus(context)
-                    val alertSms = "ALERTA ANTI-ROUBO MZ PRO! Chip SIM trocado no celular. Nova operadora: $currentOperator. Localização atual: ${status.googleMapsUrl} (Bateria: ${status.batteryPercentage}%)."
+                    val alertSms = "ALERTA ANTI-ROUBO MZ PRO! Chip SIM trocado no smartphone ${hwInfo.brand} ${hwInfo.model}. IMEI: ${hwInfo.imei1}. Nova Operadora: $currentOperator. Localização atual: ${status.googleMapsUrl} (Bateria: ${status.batteryPercentage}%)."
 
                     for (c in contacts) {
                         if (c.phoneNumber.isNotBlank()) {

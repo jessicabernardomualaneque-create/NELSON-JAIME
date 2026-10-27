@@ -42,6 +42,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.security.telephony.DeviceHardwareHelper
+import com.example.security.telephony.DeviceHardwareInfo
 
 data class UiDeviceStatus(
     val batteryPct: Int = 85,
@@ -50,7 +52,16 @@ data class UiDeviceStatus(
     val gpsCoordinates: String = "-25.9692, 32.5732 (Maputo)",
     val googleMapsUrl: String = "https://maps.google.com/?q=-25.9692,32.5732",
     val isAdminActive: Boolean = false,
-    val isSirenPlaying: Boolean = false
+    val isSirenPlaying: Boolean = false,
+    val imei: String = "358941091234567",
+    val imei2: String? = null,
+    val brand: String = "Samsung",
+    val model: String = "Galaxy A54 5G",
+    val technicalModel: String = "SM-A546B",
+    val simState: String = "Ativo e Conectado",
+    val simSlotCount: Int = 1,
+    val isDualSim: Boolean = false,
+    val operatorCode: String = "64304"
 )
 
 data class SmsSimulatedMessage(
@@ -186,6 +197,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _deviceStatus = MutableStateFlow(UiDeviceStatus())
     val deviceStatus: StateFlow<UiDeviceStatus> = _deviceStatus.asStateFlow()
 
+    private val _hardwareInfo = MutableStateFlow(DeviceHardwareHelper.getFullDeviceHardwareInfo(application))
+    val hardwareInfo: StateFlow<DeviceHardwareInfo> = _hardwareInfo.asStateFlow()
+
     private val _termsAccepted = MutableStateFlow(prefs.isTermsAccepted())
     val termsAccepted: StateFlow<Boolean> = _termsAccepted.asStateFlow()
 
@@ -217,6 +231,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             badge = "GPS OFFLINE"
         ),
         SmsCommandItem(
+            command = "IMEI",
+            syntax = "IMEI [senha]",
+            description = "Retorna o IMEI de 15 dígitos (IMEI 1 e 2), Marca e Modelo para bloqueio policial (PRM) e na operadora (INCM).",
+            example = "IMEI ${prefs.getSecurityPin()}",
+            badge = "IMEI & MARCA"
+        ),
+        SmsCommandItem(
             command = "FOTO",
             syntax = "FOTO [senha]",
             description = "Captura evidência de foto da câmara frontal do intruso e foto do ecrã com telemetria do usuário.",
@@ -226,7 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         SmsCommandItem(
             command = "STATUS",
             syntax = "STATUS [senha]",
-            description = "Relatório completo: Carga atual da bateria, titular, modelo do aparelho e rede móvel MZ.",
+            description = "Relatório completo: IMEI, Carga da bateria, titular, modelo do aparelho e rede móvel MZ.",
             example = "STATUS ${prefs.getSecurityPin()}",
             badge = "DIAGNÓSTICO"
         ),
@@ -257,7 +278,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val initialPin = prefs.getSecurityPin()
         val initialProfile = prefs.getUserProfile()
         val (bat, charging) = LocationHelper.getBatteryInfo(application)
-        val devModel = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+        val hw = DeviceHardwareHelper.getFullDeviceHardwareInfo(application)
+        val devModel = "${hw.brand} ${hw.model}"
+        val op = hw.primarySim?.operatorName ?: initialProfile?.operator?.displayName ?: "Vodacom Moçambique"
 
         _simulatedMessages.value = listOf(
             SmsSimulatedMessage(
@@ -269,7 +292,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ),
             SmsSimulatedMessage(
                 id = "init_resp",
-                text = "ANTI-ROUBO MZ PRO: Titular: ${initialProfile?.fullName ?: "Proprietário MZ"} | Estado: ARMADO | Carga Atual: $bat% ${if (charging) "(⚡ Em Carregamento)" else "(🔋 Em Bateria)"} | Aparelho: $devModel | Operadora: ${initialProfile?.operator?.displayName ?: "Vodacom Moçambique"} | Watchdog: ATIVO",
+                text = "ANTI-ROUBO MZ PRO: Titular: ${initialProfile?.fullName ?: "Proprietário MZ"} | IMEI: ${hw.imei1} | Aparelho: $devModel | Operadora: $op | Carga: $bat% ${if (charging) "(⚡ Carga)" else "(🔋 Bateria)"} | Estado: ARMADO",
                 isIncoming = true,
                 timestamp = "Hoje 10:15",
                 statusBadge = "RESPOSTA MZ",
@@ -277,7 +300,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 isCharging = charging,
                 ownerName = initialProfile?.fullName ?: "Proprietário MZ",
                 ownerPhone = initialProfile?.phoneNumber ?: "+258 84 123 4567",
-                operatorName = initialProfile?.operator?.displayName ?: "Vodacom Moçambique",
+                operatorName = op,
                 deviceModel = devModel,
                 gpsCoordinates = "-25.9692, 32.5732 (Maputo)",
                 googleMapsUrl = "https://maps.google.com/?q=-25.9692,32.5732",
@@ -292,6 +315,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshDeviceStatus() {
         viewModelScope.launch {
             val ctx = getApplication<Application>()
+            val hw = DeviceHardwareHelper.getFullDeviceHardwareInfo(ctx)
+            _hardwareInfo.value = hw
+
             val (bat, charging) = LocationHelper.getBatteryInfo(ctx)
             val loc = LocationHelper.getCurrentLocation(ctx)
             val dpm = ctx.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager
@@ -299,7 +325,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val isAdmin = dpm?.isAdminActive(adminComp) == true
 
             val profile = prefs.getUserProfile()
-            val operator = profile?.operator?.displayName ?: prefs.getLastKnownOperator()
+            val operator = hw.primarySim?.operatorName ?: profile?.operator?.displayName ?: prefs.getLastKnownOperator()
 
             val coords = if (loc != null) {
                 String.format(Locale.ROOT, "%.4f, %.4f", loc.latitude, loc.longitude)
@@ -315,8 +341,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 gpsCoordinates = coords,
                 googleMapsUrl = mapUrl,
                 isAdminActive = isAdmin,
-                isSirenPlaying = SirenController.isPlaying()
+                isSirenPlaying = SirenController.isPlaying(),
+                imei = hw.imei1,
+                imei2 = hw.imei2,
+                brand = hw.brand,
+                model = hw.model,
+                technicalModel = hw.rawModel,
+                simState = hw.primarySim?.simStateText ?: "Ativo e Conectado",
+                simSlotCount = hw.activeSimCount,
+                isDualSim = hw.isDualSimSupported,
+                operatorCode = hw.primarySim?.operatorCode ?: "64304"
             )
+        }
+    }
+
+    fun updateDeviceImei(newImei: String) {
+        val clean = newImei.replace("[^0-9]".toRegex(), "")
+        if (clean.length == 15) {
+            prefs.setDeviceImei(clean)
+            refreshDeviceStatus()
         }
     }
 
@@ -656,6 +699,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val isLockCmd = cmdName in listOf("BLOQUEAR", "LOCK", "TRAVAR")
             val isGpsCmd = cmdName in listOf("LOCALIZAR", "GPS", "ONDE")
             val isStatusCmd = cmdName in listOf("STATUS", "ESTADO", "INFO")
+            val isImeiCmd = cmdName in listOf("IMEI", "SERIAL", "HARDWARE")
 
             updated.add(
                 SmsSimulatedMessage(

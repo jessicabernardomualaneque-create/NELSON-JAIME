@@ -61,6 +61,10 @@ class SecurityPreferences(private val context: Context) {
         private const val KEY_REMEMBERED_PHONE = "key_remembered_phone"
         private const val KEY_REMEMBERED_PIN = "key_remembered_pin"
         private const val KEY_REMEMBERED_NAME = "key_remembered_name"
+        private const val KEY_DEVICE_IMEI = "key_device_imei"
+        private const val KEY_DEVICE_IMEI_2 = "key_device_imei_2"
+        private const val KEY_DEVICE_BRAND = "key_device_brand"
+        private const val KEY_DEVICE_MODEL = "key_device_model"
         private const val DEFAULT_PIN = "1234"
     }
 
@@ -272,6 +276,38 @@ class SecurityPreferences(private val context: Context) {
 
     fun setLastKnownOperator(op: String) {
         prefs.edit().putString(KEY_LAST_KNOWN_OPERATOR, op).apply()
+    }
+
+    fun getDeviceImei(): String {
+        return prefs.getString(KEY_DEVICE_IMEI, "") ?: ""
+    }
+
+    fun setDeviceImei(imei: String) {
+        prefs.edit().putString(KEY_DEVICE_IMEI, imei).apply()
+    }
+
+    fun getDeviceImei2(): String {
+        return prefs.getString(KEY_DEVICE_IMEI_2, "") ?: ""
+    }
+
+    fun setDeviceImei2(imei: String) {
+        prefs.edit().putString(KEY_DEVICE_IMEI_2, imei).apply()
+    }
+
+    fun getDeviceBrand(): String {
+        return prefs.getString(KEY_DEVICE_BRAND, "") ?: ""
+    }
+
+    fun setDeviceBrand(brand: String) {
+        prefs.edit().putString(KEY_DEVICE_BRAND, brand).apply()
+    }
+
+    fun getDeviceModel(): String {
+        return prefs.getString(KEY_DEVICE_MODEL, "") ?: ""
+    }
+
+    fun setDeviceModel(model: String) {
+        prefs.edit().putString(KEY_DEVICE_MODEL, model).apply()
     }
 
     fun getFailedAttemptsCount(): Int {

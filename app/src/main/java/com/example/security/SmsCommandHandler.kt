@@ -53,8 +53,9 @@ object SmsCommandHandler {
         val profile = prefs.getUserProfile()
         val ownerName = profile?.fullName ?: "Proprietário Não Registado"
         val ownerPhone = profile?.phoneNumber ?: senderNumber
-        val operatorName = profile?.operator?.displayName ?: prefs.getLastKnownOperator()
-        val deviceModel = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+        val hwInfo = com.example.security.telephony.DeviceHardwareHelper.getFullDeviceHardwareInfo(context)
+        val operatorName = hwInfo.primarySim?.operatorName ?: profile?.operator?.displayName ?: prefs.getLastKnownOperator()
+        val deviceModel = "${hwInfo.brand} ${hwInfo.model}"
 
         // Validate PIN
         if (rawPin != configuredPin) {
@@ -150,13 +151,16 @@ object SmsCommandHandler {
                     handleFotoCommand(context, prefs, senderNumber, onResult, battery, isCharging, deviceModel, operatorName, ownerName, ownerPhone)
                 }
                 "STATUS", "ESTADO", "INFO" -> {
-                    handleStatusCommand(context, prefs, senderNumber, onResult, battery, isCharging, deviceModel, operatorName, ownerName, ownerPhone)
+                    handleStatusCommand(context, prefs, senderNumber, onResult, battery, isCharging, deviceModel, operatorName, ownerName, ownerPhone, hwInfo)
+                }
+                "IMEI", "SERIAL", "HARDWARE" -> {
+                    handleImeiCommand(context, prefs, senderNumber, onResult, battery, isCharging, hwInfo, ownerName, ownerPhone)
                 }
                 "AJUDA", "HELP", "COMANDOS" -> {
                     handleAjudaCommand(context, senderNumber, onResult, battery, isCharging, deviceModel, operatorName, ownerName, ownerPhone)
                 }
                 else -> {
-                    val helpResponse = "ANTI-ROUBO MZ PRO: Comando desconhecido '$rawCommand'. Use: LOCALIZAR, ALARME, BLOQUEAR, FOTO, STATUS, AJUDA seguido do seu PIN."
+                    val helpResponse = "ANTI-ROUBO MZ PRO: Comando desconhecido '$rawCommand'. Use: LOCALIZAR, ALARME, BLOQUEAR, FOTO, STATUS, IMEI, AJUDA seguido do seu PIN."
                     sendSms(context, senderNumber, helpResponse)
                     onResult?.invoke(
                         CommandResult(
@@ -372,21 +376,20 @@ object SmsCommandHandler {
         deviceModel: String,
         operatorName: String,
         ownerName: String,
-        ownerPhone: String
+        ownerPhone: String,
+        hwInfo: com.example.security.telephony.DeviceHardwareInfo
     ) {
-        val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-        val carrier = tm?.networkOperatorName?.ifEmpty { null } ?: operatorName
+        val carrier = hwInfo.primarySim?.operatorName ?: operatorName
         val armed = if (prefs.isArmed()) "ARMADO" else "DESARMADO"
-        val stealth = if (prefs.isStealthModeEnabled()) "FURTIVO" else "NORMAL"
-        val chargingStr = if (isCharging) "(⚡ Em Carregamento)" else "(🔋 Em Descarga)"
+        val chargingStr = if (isCharging) "(⚡ Carga)" else "(🔋 Bateria)"
 
-        val response = "ANTI-ROUBO MZ PRO: Titular: $ownerName | Estado: $armed | Carga Atual: $battery% $chargingStr | Aparelho: $deviceModel | Operadora: $carrier | Watchdog: ATIVO"
+        val response = "ANTI-ROUBO MZ PRO: Titular: $ownerName | IMEI: ${hwInfo.imei1} | Aparelho: ${hwInfo.brand} ${hwInfo.model} | Operadora: $carrier | Carga: $battery% $chargingStr | Estado: $armed"
 
         sendSms(context, senderNumber, response)
 
         prefs.logEvent(
             title = "Comando STATUS Executado",
-            description = "Diagnóstico completo enviado para $senderNumber (Bateria: $battery%, Carga: $isCharging)",
+            description = "Diagnóstico completo com IMEI e Operadora enviado para $senderNumber (Bateria: $battery%, Carga: $isCharging)",
             type = EventType.SMS_COMMAND_RECEIVED,
             senderNumber = senderNumber
         )
@@ -396,10 +399,50 @@ object SmsCommandHandler {
                 success = true,
                 commandName = "STATUS",
                 responseMessage = response,
-                details = "Relatório de status enviado",
+                details = "Relatório de status com IMEI enviado",
                 batteryPct = battery,
                 isCharging = isCharging,
-                deviceModel = deviceModel,
+                deviceModel = "${hwInfo.brand} ${hwInfo.model}",
+                operatorName = carrier,
+                ownerName = ownerName,
+                ownerPhone = ownerPhone
+            )
+        )
+    }
+
+    private fun handleImeiCommand(
+        context: Context,
+        prefs: SecurityPreferences,
+        senderNumber: String,
+        onResult: ((CommandResult) -> Unit)?,
+        battery: Int,
+        isCharging: Boolean,
+        hwInfo: com.example.security.telephony.DeviceHardwareInfo,
+        ownerName: String,
+        ownerPhone: String
+    ) {
+        val imei2Part = if (!hwInfo.imei2.isNullOrBlank()) " | IMEI 2: ${hwInfo.imei2}" else ""
+        val carrier = hwInfo.primarySim?.operatorName ?: prefs.getLastKnownOperator()
+        val response = "ANTI-ROUBO MZ PRO: IMEI 1: ${hwInfo.imei1}$imei2Part | Marca: ${hwInfo.brand} | Modelo: ${hwInfo.model} (${hwInfo.rawModel}) | Operadora: $carrier | Titular: $ownerName | Bateria: $battery%"
+
+        sendSms(context, senderNumber, response)
+
+        prefs.logEvent(
+            title = "Comando IMEI Executado",
+            description = "Identificadores de Hardware enviados para $senderNumber (IMEI: ${hwInfo.imei1}, Marca: ${hwInfo.brand})",
+            type = EventType.SMS_COMMAND_RECEIVED,
+            senderNumber = senderNumber
+        )
+
+        onResult?.invoke(
+            CommandResult(
+                success = true,
+                commandName = "IMEI",
+                responseMessage = response,
+                details = "IMEI: ${hwInfo.imei1} | ${hwInfo.brand} ${hwInfo.model}",
+                batteryPct = battery,
+                isCharging = isCharging,
+                deviceModel = "${hwInfo.brand} ${hwInfo.model}",
                 operatorName = carrier,
                 ownerName = ownerName,
                 ownerPhone = ownerPhone
@@ -418,7 +461,7 @@ object SmsCommandHandler {
         ownerName: String,
         ownerPhone: String
     ) {
-        val response = "ANTI-ROUBO MZ PRO: Comandos SMS: LOCALIZAR [pin], ALARME [pin], BLOQUEAR [pin], FOTO [pin], STATUS [pin]."
+        val response = "ANTI-ROUBO MZ PRO: Comandos SMS: LOCALIZAR [pin], ALARME [pin], BLOQUEAR [pin], FOTO [pin], STATUS [pin], IMEI [pin]."
         sendSms(context, senderNumber, response)
 
         onResult?.invoke(

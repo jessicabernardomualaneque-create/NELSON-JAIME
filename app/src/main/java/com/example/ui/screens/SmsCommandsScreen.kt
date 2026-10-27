@@ -713,6 +713,20 @@ fun SmsMessageBubble(
                                 color = TextSecondary,
                                 fontSize = 11.sp
                             )
+                            val imeiFound = if (msg.text.contains("IMEI: ")) {
+                                msg.text.substringAfter("IMEI: ").substringBefore(" |").trim()
+                            } else if (msg.text.contains("IMEI 1: ")) {
+                                msg.text.substringAfter("IMEI 1: ").substringBefore(" |").trim()
+                            } else null
+                            if (imeiFound != null) {
+                                Text(
+                                    text = "IMEI: $imeiFound",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CyanAccent,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 

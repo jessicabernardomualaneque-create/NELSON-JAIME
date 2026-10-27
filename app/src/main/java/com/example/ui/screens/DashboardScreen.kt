@@ -85,6 +85,25 @@ import com.example.ui.theme.VodacomRed
 import com.example.ui.viewmodel.MainViewModel
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import android.widget.Toast
+import com.example.data.model.MozambiqueOperator
+import com.example.security.telephony.DeviceHardwareHelper
 
 @Composable
 fun DashboardScreen(
@@ -113,6 +132,13 @@ fun DashboardScreen(
     val diasRestantes by viewModel.diasRestantes.collectAsState()
     val tipoPlano by viewModel.tipoPlano.collectAsState()
     val expiryFormatted by viewModel.expiryDateFormatted.collectAsState()
+    val hardwareInfo by viewModel.hardwareInfo.collectAsState()
+
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    var isImeiRevealed by remember { mutableStateOf(false) }
+    var showEditImeiDialog by remember { mutableStateOf(false) }
+    var editImeiInput by remember(hardwareInfo.imei1) { mutableStateOf(hardwareInfo.imei1) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "shield_pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -455,37 +481,400 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Device Telemetry Card
+        // Card de Hardware: Leitura do Cartão SIM, IMEI e Marca por Modelo
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("telemetry_card"),
+                .testTag("hardware_sim_imei_card"),
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = CardDark),
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+            border = androidx.compose.foundation.BorderStroke(1.2.dp, CyanAccent.copy(alpha = 0.6f))
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "DIAGNÓSTICO DO DISPOSITIVO",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = CyanAccent
-                    )
-                    Text(
-                        text = "Moçambique (MZ)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(CyanAccent.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Smartphone, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "HARDWARE, SIM & IMEI MZ",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Identificação Oficial de Segurança",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextTertiary,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = {
+                            viewModel.refreshDeviceStatus()
+                            Toast.makeText(context, "Telemetria e SIM atualizados!", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Atualizar", tint = CyanAccent, modifier = Modifier.size(18.dp))
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Grid 2x2: Battery, Carrier, GPS, Admin
+                // SEÇÃO 1: MARCA & MODELO INTELIGENTE
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(CardElevated)
+                        .padding(10.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(CyanAccent.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = hardwareInfo.brand.uppercase(java.util.Locale.ROOT),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Black,
+                                        color = CyanAccent,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = hardwareInfo.model,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+
+                            Text(
+                                text = hardwareInfo.rawModel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextTertiary,
+                                fontSize = 10.sp
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Fabricante: ${hardwareInfo.manufacturer} • ${hardwareInfo.androidVersion}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextSecondary,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // SEÇÃO 2: CARTÃO SIM & OPERADORA DE MOÇAMBIQUE
+                hardwareInfo.simSlots.forEach { simSlot ->
+                    val opColor = when (simSlot.operator) {
+                        MozambiqueOperator.VODACOM -> VodacomRed
+                        MozambiqueOperator.MOVITEL -> AmberWarning
+                        MozambiqueOperator.TMCEL -> CyanAccent
+                        MozambiqueOperator.UNKNOWN -> TextSecondary
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(CardElevated)
+                            .border(1.dp, opColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp))
+                            .padding(10.dp)
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.SimCard,
+                                        contentDescription = "SIM",
+                                        tint = opColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "${simSlot.slotLabel}: ${simSlot.operatorName}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                        Text(
+                                            text = "Código de Rede: ${simSlot.operatorCode} • ${simSlot.networkType}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextTertiary,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(opColor.copy(alpha = 0.2f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (simSlot.isReady) "ATIVO" else "SIM PRONTO",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = opColor,
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "ICCID / Série: ${simSlot.simSerialNumber}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+
+                            // Atalhos USSD da Operadora
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                                            data = android.net.Uri.parse("tel:${android.net.Uri.encode(simSlot.ussdBalanceCode)}")
+                                        }
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(32.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                                ) {
+                                    Text(
+                                        text = "Saldo (${simSlot.ussdBalanceCode})",
+                                        fontSize = 10.sp,
+                                        color = opColor,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                                            data = android.net.Uri.parse("tel:${android.net.Uri.encode(simSlot.mobileMoneyUssd)}")
+                                        }
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(32.dp),
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                                ) {
+                                    Text(
+                                        text = "${simSlot.mobileMoneyName} (${simSlot.mobileMoneyUssd})",
+                                        fontSize = 10.sp,
+                                        color = TextPrimary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // SEÇÃO 3: NÚMERO IMEI (15 DÍGITOS)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(CardElevated)
+                        .border(1.dp, BorderSubtle, RoundedCornerShape(10.dp))
+                        .padding(10.dp)
+                ) {
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Fingerprint,
+                                    contentDescription = "IMEI",
+                                    tint = CyanAccent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "IMEI 1 (Hardware Principal):",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextTertiary
+                                )
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { isImeiRevealed = !isImeiRevealed },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isImeiRevealed) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                        contentDescription = "Revelar IMEI",
+                                        tint = CyanAccent,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                IconButton(
+                                    onClick = { showEditImeiDialog = true },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Editar IMEI",
+                                        tint = TextTertiary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // IMEI Text Box
+                        val displayedImei = if (isImeiRevealed) {
+                            DeviceHardwareHelper.formatImeiPretty(hardwareInfo.imei1)
+                        } else {
+                            val raw = hardwareInfo.imei1
+                            if (raw.length == 15) {
+                                "${raw.take(4)} •••• •••• ${raw.takeLast(3)}"
+                            } else {
+                                "•••• •••• •••• •••"
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = displayedImei,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Black,
+                                color = CyanAccent,
+                                letterSpacing = 1.sp
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(hardwareInfo.imei1))
+                                    Toast.makeText(context, "IMEI copiado para a área de transferência!", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = TextPrimary, modifier = Modifier.size(16.dp))
+                            }
+                        }
+
+                        if (!hardwareInfo.imei2.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "IMEI 2 (Slot 2): ${if (isImeiRevealed) DeviceHardwareHelper.formatImeiPretty(hardwareInfo.imei2!!) else "•••• •••• ••••"}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                IconButton(
+                                    onClick = {
+                                        clipboardManager.setText(AnnotatedString(hardwareInfo.imei2!!))
+                                        Toast.makeText(context, "IMEI 2 copiado!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar IMEI 2", tint = TextTertiary, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        }
+
+                        // Botão Conferir no Teclado *#06#
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    try {
+                                        context.startActivity(DeviceHardwareHelper.createCheckImeiDialIntent())
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Disque *#06# no teclado para ver o IMEI de fábrica.", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                            ) {
+                                Icon(Icons.Default.Dialpad, contentDescription = null, tint = CyanAccent, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Conferir no Teclado (*#06#)", fontSize = 11.sp, color = CyanAccent)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Diagnostic Telemetry (Battery, Last GPS, Device Admin)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     // Battery
                     Row(
@@ -502,61 +891,10 @@ fun DashboardScreen(
                         Column {
                             Text("Bateria", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
                             Text(
-                                text = "${deviceStatus.batteryPct}% ${if (deviceStatus.isCharging) "(Carregando)" else ""}",
+                                text = "${deviceStatus.batteryPct}% ${if (deviceStatus.isCharging) "(⚡ Carga)" else ""}",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
-                            )
-                        }
-                    }
-
-                    // Carrier (Vodacom/Movitel/Tmcel)
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CellTower,
-                            contentDescription = "Operadora",
-                            tint = CyanAccent,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Operadora MZ", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-                            Text(
-                                text = deviceStatus.operatorName,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                color = TextPrimary
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    // GPS Coordinates
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MyLocation,
-                            contentDescription = "GPS",
-                            tint = AmberWarning,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Último GPS", style = MaterialTheme.typography.labelSmall, color = TextTertiary)
-                            Text(
-                                text = deviceStatus.gpsCoordinates,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextPrimary,
-                                maxLines = 1
                             )
                         }
                     }
@@ -942,5 +1280,69 @@ fun DashboardScreen(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
+
+    if (showEditImeiDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditImeiDialog = false },
+            title = {
+                Text(
+                    text = "Confirmar / Editar IMEI Real",
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Insira o número IMEI de 15 dígitos que consta na caixa do smartphone, na fatura ou digitando *#06# no teclado.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = editImeiInput,
+                        onValueChange = { input ->
+                            editImeiInput = input.filter { it.isDigit() }.take(15)
+                        },
+                        label = { Text("IMEI (15 Dígitos)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = CyanAccent,
+                            focusedLabelColor = CyanAccent
+                        )
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Dígitos digitados: ${editImeiInput.length}/15",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (editImeiInput.length == 15) EmeraldGreen else AmberWarning
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editImeiInput.length == 15) {
+                            viewModel.updateDeviceImei(editImeiInput)
+                            showEditImeiDialog = false
+                            Toast.makeText(context, "IMEI de hardware salvo com sucesso!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "O IMEI deve conter exatamente 15 dígitos.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = CyanAccent)
+                ) {
+                    Text("Salvar IMEI", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showEditImeiDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            },
+            containerColor = CardElevated
+        )
     }
 }

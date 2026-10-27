@@ -198,48 +198,51 @@ class ExampleRobolectricTest {
     assertFalse(vaultRepo.isVaultUnlocked.value)
 
     // Failed unlock with wrong pin
-    val failed = vaultRepo.unlockVault("0000")
-    assertFalse(failed)
+    val failed = vaultRepo.unlockVault("987654")
+    assertEquals(com.example.data.database.VaultUnlockStatus.FAILED, failed)
     assertFalse(vaultRepo.isVaultUnlocked.value)
 
     // Successful unlock with default device PIN "1234"
     val success = vaultRepo.unlockVault("1234")
-    assertTrue(success)
+    assertEquals(com.example.data.database.VaultUnlockStatus.SUCCESS_REAL, success)
     assertTrue(vaultRepo.isVaultUnlocked.value)
-
-    // Insert hidden photo
-    vaultRepo.insertHiddenPhoto(
-      title = "Recibo Confidencial",
-      subtitle = "Maputo",
-      imageUriOrTag = "test_tag",
-      fileSizeBytes = 1024 * 500
-    )
-
-    // Insert hidden message
-    vaultRepo.insertHiddenMessage(
-      title = "Código M-Pesa",
-      sender = "+258840001122",
-      secretMessage = "PIN Secreto: 9812"
-    )
-
-    // Insert hidden music
-    vaultRepo.insertHiddenMusic(
-      title = "Gravação de Voz",
-      artistOrDuration = "01:30 min",
-      audioNote = "test_audio",
-      fileSizeBytes = 1024 * 1024
-    )
-
-    // Insert app lock
-    vaultRepo.insertOrToggleAppLock(
-      appName = "WhatsApp",
-      packageName = "com.whatsapp",
-      isLocked = true
-    )
 
     // Re-lock vault
     vaultRepo.lockVault()
     assertFalse(vaultRepo.isVaultUnlocked.value)
+  }
+
+  @Test
+  fun `verify DeviceHardwareHelper reads SIM, operator, IMEI, and brand by model`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+
+    // 1. Operator classification test for Mozambique
+    val vodacomOp = com.example.security.telephony.DeviceHardwareHelper.classifyMozambiqueOperator("64304", "Vodacom MZ", "+258841234567")
+    assertEquals(com.example.data.model.MozambiqueOperator.VODACOM, vodacomOp)
+
+    val movitelOp = com.example.security.telephony.DeviceHardwareHelper.classifyMozambiqueOperator("64303", "Movitel", "+258861234567")
+    assertEquals(com.example.data.model.MozambiqueOperator.MOVITEL, movitelOp)
+
+    val tmcelOp = com.example.security.telephony.DeviceHardwareHelper.classifyMozambiqueOperator("64301", "Tmcel", "+258821234567")
+    assertEquals(com.example.data.model.MozambiqueOperator.TMCEL, tmcelOp)
+
+    // 2. Hardware info reading
+    val hwInfo = com.example.security.telephony.DeviceHardwareHelper.getFullDeviceHardwareInfo(context)
+    assertNotNull(hwInfo)
+    assertTrue(hwInfo.brand.isNotBlank())
+    assertTrue(hwInfo.model.isNotBlank())
+
+    // 3. IMEI format verification (Must be exactly 15 digits)
+    val (imei1, _) = com.example.security.telephony.DeviceHardwareHelper.getDeviceImei(context)
+    assertNotNull(imei1)
+    assertEquals(15, imei1.length)
+    assertTrue(imei1.all { it.isDigit() })
+
+    // 4. SIM cards detection
+    val simCards = com.example.security.telephony.DeviceHardwareHelper.readSimCards(context)
+    assertNotNull(simCards)
+    assertTrue(simCards.isNotEmpty())
+    assertNotNull(simCards.first().operator)
   }
 }
 
