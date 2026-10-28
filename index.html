@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anti Roubo</title>
+<link rel="manifest" href="manifest.json">
+</head>
+<body style="background:#000;color:#fff;text-align:center;font-family:Arial;padding:20px">
+<h1>ANTI ROUBO NELSON</h1>
+<p id="loc">Buscando GPS...</p>
+<button onclick="alarme()" style="width:100%;padding:20px;background:red;color:white;font-size:20px;border-radius:10px">ALARME</button><br><br>
+<button onclick="sos()" style="width:100%;padding:20px;background:lime;font-size:20px;border-radius:10px">SOS WHATSAPP</button><br><br>
+<button onclick="foto()" style="width:100%;padding:20px;background:blue;color:white;font-size:20px;border-radius:10px">FOTO</button>
+<video id="v" autoplay style="display:none;width:100%"></video>
+<script>
+var la=0, lo=0;
+navigator.geolocation.watchPosition(function(p){la=p.coords.latitude;lo=p.coords.longitude;document.getElementById('loc').innerHTML=la+","+lo});
+function alarme(){var a=new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg');a.loop=true;a.play();alert('ALARME');}
+function sos(){window.open('https://wa.me/?text=SOCORRO%20'+la+','+lo+'%20https://maps.google.com/?q='+la+','+lo);}
+async function foto(){let s=await navigator.mediaDevices.getUserMedia({video:true});let v=document.getElementById('v');v.srcObject=s;v.style.display='block';}
+</script>
+</body>
+</html>
